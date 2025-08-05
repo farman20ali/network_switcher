@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Network Switcher
+Comment=Network Switcher Tray Application
+Exec=nohup /home/bahl/create_snaps/network_switcher/network_switcher.py
+Icon=/home/bahl/create_snaps/network_switcher/network_icon.png
+Terminal=false
+X-GNOME-Autostart-enabled=true

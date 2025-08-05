@@ -203,7 +203,8 @@ def update_menu(icon):
 
 # Create the system tray icon and menu
 def create_menu():
-    image_path = "network_icon.png"
+    # Use absolute path for the icon
+    image_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "network_icon.png")
     if os.path.isfile(image_path):
         image = Image.open(image_path)
     else:

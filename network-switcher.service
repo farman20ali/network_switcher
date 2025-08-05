@@ -1,0 +1,15 @@
+[Unit]
+Description=Network Switcher Tray Application
+After=graphical-session.target
+
+[Service]
+Type=simple
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/%u/.Xauthority
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+ExecStart=/home/bahl/create_snaps/network_switcher/network_switcher.py
+Restart=always
+
+[Install]
+WantedBy=graphical-session.target

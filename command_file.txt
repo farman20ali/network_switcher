@@ -1,2 +1,0 @@
-
-nohup ./network_switcher.py </dev/null >/dev/null 2>&1 &
