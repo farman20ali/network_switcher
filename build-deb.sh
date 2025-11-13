@@ -132,11 +132,13 @@ Package: network-switcher
 Architecture: all
 Depends: \${python3:Depends},
          \${misc:Depends},
-         python3-pil,
-         network-manager,
          python3 (>= 3.6),
-         python3-pip
-Recommends: libayatana-appindicator3-1 | gir1.2-appindicator3-0.1
+         python3-pil,
+         python3-gi,
+         python3-pip,
+         network-manager,
+         gir1.2-ayatanaappindicator3-0.1 | gir1.2-appindicator3-0.1,
+         libayatana-appindicator3-1
 Description: Quick network mode switcher for Linux
  Network Switcher is a lightweight system tray application that allows you to
  quickly switch between different network modes (Wi-Fi, Wired, Both, Hotspot)
@@ -316,8 +318,33 @@ echo ""
 echo "Option 2: Wait for next login"
 echo "  The service will auto-enable on your next login/logout"
 echo ""
+echo "🎯 Choose one of these options:"
+echo ""
+echo "Option 1: Start immediately (recommended)"
+echo "  systemctl --user daemon-reload && systemctl --user enable --now network-switcher.service"
+echo ""
+echo "Option 2: Wait for next login"
+echo "  The service will auto-enable on your next login/logout"
+echo ""
 echo "Option 3: Start manually later"
 echo "  systemctl --user start network-switcher.service"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "📝 Troubleshooting:"
+echo ""
+echo "If installation failed with dependency errors, install missing packages:"
+echo "  sudo apt-get install gir1.2-ayatanaappindicator3-0.1 python3-gi"
+echo "  pip3 install pystray>=0.19.4"
+echo ""
+echo "Then try installing the package again:"
+echo "  sudo dpkg -i network-switcher_1.0.0-1_all.deb"
+echo ""
+echo "To check service logs:"
+echo "  journalctl --user -u network-switcher.service -f"
+echo ""
+echo "To check service status:"
+echo "  systemctl --user status network-switcher.service"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
