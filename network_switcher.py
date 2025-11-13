@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
 
+"""
+Network Switcher - Quick network mode switcher for Linux
+A lightweight system tray application for managing network connections.
+"""
+
+__version__ = "1.0.0"
+__author__ = "Network Switcher Contributors"
+__license__ = "MIT"
+
 import subprocess
 from pystray import MenuItem as item
 import pystray
@@ -7,9 +16,66 @@ from PIL import Image
 import os
 import logging
 import sys
+import argparse
+import signal
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+# Configure logging with file output
+LOG_DIR = os.path.expanduser("~/.config/network-switcher")
+LOG_FILE = os.path.join(LOG_DIR, "network-switcher.log")
+
+# Create log directory if it doesn't exist
+os.makedirs(LOG_DIR, exist_ok=True)
+
+# Setup logging to both file and stdout
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+# Parse command-line arguments
+def parse_arguments():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description='Network Switcher - Quick network mode switcher for Linux',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Examples:
+  %(prog)s              Start the application
+  %(prog)s --debug      Start with debug logging
+  %(prog)s --version    Show version information
+        '''
+    )
+    parser.add_argument(
+        '--version',
+        action='version',
+        version=f'%(prog)s {__version__}'
+    )
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Enable debug logging'
+    )
+    parser.add_argument(
+        '--no-service',
+        action='store_true',
+        help='Run in foreground (do not daemonize)'
+    )
+    return parser.parse_args()
+
+# Parse arguments early
+args = parse_arguments()
+
+# Set debug logging if requested
+if args.debug:
+    logging.getLogger().setLevel(logging.DEBUG)
+    logging.debug("Debug logging enabled")
+
+logging.info(f"Network Switcher v{__version__} starting...")
+logging.info(f"Log file: {LOG_FILE}")
 
 # Function to find the Ethernet connection name dynamically
 def get_ethernet_connection_name(default="connection-lan"):
@@ -203,18 +269,32 @@ def update_menu(icon):
 
 # Create the system tray icon and menu
 def create_menu():
-    # Use absolute path for the icon
-    image_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "network_icon.png")
-    if os.path.isfile(image_path):
+    # Try multiple paths for icon (system and local installations)
+    icon_locations = [
+        "/usr/share/pixmaps/network-switcher.png",  # Debian package install
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "network_icon.png"),  # Local
+        os.path.join(os.getenv('SNAP', ''), 'bin', 'network_icon.png'),  # Snap
+        "/snap/network-switcher/current/bin/network_icon.png",  # Snap absolute
+        os.path.expanduser("~/.local/share/network-switcher/network_icon.png"),  # User install
+    ]
+    
+    image_path = None
+    for path in icon_locations:
+        if path and os.path.isfile(path):
+            image_path = path
+            logging.debug(f"Found icon at: {image_path}")
+            break
+    
+    if image_path:
         image = Image.open(image_path)
     else:
-        logging.error(f"Image file {image_path} not found. Using a default icon.")
+        logging.warning("Image file not found in any location. Using a default icon.")
+        logging.debug(f"Searched paths: {icon_locations}")
         image = Image.new("RGB", (64, 64), "blue")
 
     icon = pystray.Icon("network_switcher", image, "Network Switcher", create_menu_items(None))
 
     # Handle signals for graceful exit (removes tray icon on Ctrl+C or SIGTERM)
-    import signal
     def signal_handler(sig, frame):
         logging.info("Exiting and removing tray icon...")
         icon.stop()
