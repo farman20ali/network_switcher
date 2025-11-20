@@ -130,6 +130,45 @@ def disable_all_connections():
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to disable all network connections: {e}")
 
+# Function to open network settings
+def open_network_settings():
+    """Open the system's network settings panel"""
+    try:
+        # Try different desktop environments' network settings applications
+        settings_apps = [
+            # GNOME (Ubuntu, Fedora, etc.)
+            ["gnome-control-center", "wifi"],
+            # Alternative GNOME command
+            ["gnome-control-center", "network"],
+            # KDE Plasma
+            ["kcmshell5", "kcm_networkmanagement"],
+            # NetworkManager connection editor (works on most DEs)
+            ["nm-connection-editor"],
+            # XFCE
+            ["xfce4-settings-manager", "--socket-id=network"],
+            # Fallback: try to open generic settings
+            ["gnome-control-center"],
+            ["systemsettings5"],
+        ]
+        
+        for cmd in settings_apps:
+            try:
+                # Use Popen with stderr suppression to avoid error messages
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                logging.info(f"Opened network settings using: {' '.join(cmd)}")
+                return
+            except FileNotFoundError:
+                continue
+            except Exception as e:
+                logging.debug(f"Failed to open settings with {cmd}: {e}")
+                continue
+        
+        # If all else fails, log an error
+        logging.error("Could not find a suitable network settings application")
+        
+    except Exception as e:
+        logging.error(f"Failed to open network settings: {e}")
+
 # Function to disable the hotspot
 def disable_hotspot():
     try:
@@ -230,6 +269,7 @@ def create_menu_items(icon):
     both_icon = "🔄"   # Unicode character for both connections icon
     hotspot_icon = "📡"  # Unicode character for hotspot icon
     stop_icon = "❌"  # Unicode character for stop icon
+    settings_icon = "⚙️"  # Unicode character for settings icon
 
     wifi_status, ethernet_status, hotspot_status = get_connection_status()
 
@@ -239,6 +279,9 @@ def create_menu_items(icon):
         item(f"{both_icon} Enable Both Wi-Fi and Wired", switch_to_both),
         item(f"{hotspot_icon} Turn On Hotspot", switch_to_hotspot),
         item(f"{stop_icon} Stop All Connections", stop_all_connections),
+        pystray.Menu.SEPARATOR,
+        item(f"{settings_icon} Wi-Fi Settings", lambda: open_network_settings()),
+        pystray.Menu.SEPARATOR,
         item("Quit", lambda icon, item: icon.stop())
     ]
 
