@@ -18,6 +18,7 @@ import logging
 import sys
 import argparse
 import signal
+import time
 
 # Configure logging with file output
 LOG_DIR = os.path.expanduser("~/.config/network-switcher")
@@ -28,7 +29,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 # Setup logging to both file and stdout
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,  # Changed to DEBUG to see detailed logs
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(LOG_FILE),
@@ -198,6 +199,7 @@ def switch_to_wifi(icon, item):
         disable_hotspot()
         subprocess.run(["nmcli", "r", "wifi", "on"], check=True)
         subprocess.run(["nmcli", "c", "down", conn_name], check=True)
+        time.sleep(2)  # Wait for WiFi to connect
         update_menu(icon)
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to switch to Wi-Fi: {e}")
@@ -208,6 +210,7 @@ def switch_to_wired(icon, item):
         disable_hotspot()
         subprocess.run(["nmcli", "c", "up", conn_name], check=True)
         subprocess.run(["nmcli", "r", "wifi", "off"], check=True)
+        time.sleep(1)  # Wait for connection to establish
         update_menu(icon)
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to switch to wired connection: {e}")
@@ -218,6 +221,7 @@ def switch_to_both(icon, item):
         disable_hotspot()
         subprocess.run(["nmcli", "r", "wifi", "on"], check=True)
         subprocess.run(["nmcli", "c", "up", conn_name], check=True)
+        time.sleep(2)  # Wait for both connections to establish
         update_menu(icon)
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to enable both Wi-Fi and wired connection: {e}")
@@ -240,15 +244,45 @@ def stop_all_connections(icon, item):
 
 # Get the current connection status
 def get_connection_status():
+    # Check if Wi-Fi radio is enabled
     try:
         wifi_status = subprocess.check_output(["nmcli", "-t", "-f", "WIFI", "radio"]).decode().strip()
     except subprocess.CalledProcessError:
         wifi_status = "unknown"
-
+    
+    # Get the current Wi-Fi SSID (network name) and check if actually connected
+    wifi_ssid = None
+    wifi_connected = False
     try:
-        ethernet_status = subprocess.check_output(["nmcli", "-t", "-f", "DEVICE,STATE", "device", "status"]).decode().strip()
-        ethernet_status = [line for line in ethernet_status.splitlines() if conn_name in line and 'connected' in line]
-        ethernet_status = "connected" if ethernet_status else "disconnected"
+        # Get active Wi-Fi connection name
+        active_wifi = subprocess.check_output(
+            ["nmcli", "-t", "-f", "NAME,TYPE,DEVICE", "connection", "show", "--active"]
+        ).decode().strip()
+        
+        for line in active_wifi.splitlines():
+            parts = line.split(':')
+            if len(parts) >= 3 and '802-11-wireless' in parts[1]:
+                wifi_ssid = parts[0]
+                wifi_connected = True
+                logging.debug(f"WiFi detected: {wifi_ssid}")
+                break
+    except subprocess.CalledProcessError:
+        wifi_ssid = None
+        wifi_connected = False
+
+    # Check if ethernet connection is active
+    ethernet_status = "disconnected"
+    try:
+        active_connections = subprocess.check_output(
+            ["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show", "--active"]
+        ).decode().strip()
+        
+        for line in active_connections.splitlines():
+            parts = line.split(':')
+            if len(parts) >= 2 and '802-3-ethernet' in parts[1]:
+                ethernet_status = "connected"
+                logging.debug(f"Ethernet detected: {parts[0]}")
+                break
     except subprocess.CalledProcessError:
         ethernet_status = "unknown"
 
@@ -259,7 +293,8 @@ def get_connection_status():
     except subprocess.CalledProcessError:
         hotspot_status = "unknown"
 
-    return wifi_status, ethernet_status, hotspot_status
+    logging.debug(f"Status: wifi_connected={wifi_connected}, ethernet={ethernet_status}, hotspot={hotspot_status}, ssid={wifi_ssid}")
+    return wifi_status, wifi_connected, ethernet_status, hotspot_status, wifi_ssid
 
 # Helper function to create the menu items
 def create_menu_items(icon):
@@ -271,7 +306,7 @@ def create_menu_items(icon):
     stop_icon = "❌"  # Unicode character for stop icon
     settings_icon = "⚙️"  # Unicode character for settings icon
 
-    wifi_status, ethernet_status, hotspot_status = get_connection_status()
+    wifi_status, wifi_connected, ethernet_status, hotspot_status, wifi_ssid = get_connection_status()
 
     menu_items = [
         item(f"{wifi_icon} Switch to Wi-Fi", switch_to_wifi),
@@ -285,15 +320,26 @@ def create_menu_items(icon):
         item("Quit", lambda icon, item: icon.stop())
     ]
 
-    # Add a label indicating the current connection status
-    if "enabled" in wifi_status and ethernet_status == "connected" and hotspot_status == "inactive":
-        menu_items.insert(0, item(f"{both_icon} Current Connection: Both Wi-Fi and Wired", lambda: None, enabled=False))
-    elif "enabled" in wifi_status and hotspot_status == "inactive":
-        menu_items.insert(0, item(f"{wifi_icon} Current Connection: Wi-Fi", lambda: None, enabled=False))
+    # Add a label indicating the current connection status with Wi-Fi SSID
+    # Check if both WiFi and Wired are connected
+    if wifi_connected and ethernet_status == "connected" and hotspot_status == "inactive":
+        if wifi_ssid:
+            menu_items.insert(0, item(f"{both_icon} Current Connection: Both Wi-Fi and Wired\n{wifi_icon} Network: {wifi_ssid}", lambda: None, enabled=False))
+        else:
+            menu_items.insert(0, item(f"{both_icon} Current Connection: Both Wi-Fi and Wired", lambda: None, enabled=False))
+    # Check if only WiFi is connected
+    elif wifi_connected and hotspot_status == "inactive":
+        if wifi_ssid:
+            menu_items.insert(0, item(f"{wifi_icon} Current Connection: Wi-Fi\n{wifi_icon} Network: {wifi_ssid}", lambda: None, enabled=False))
+        else:
+            menu_items.insert(0, item(f"{wifi_icon} Current Connection: Wi-Fi", lambda: None, enabled=False))
+    # Check if only Wired is connected
     elif ethernet_status == "connected" and hotspot_status == "inactive":
         menu_items.insert(0, item(f"{wired_icon} Current Connection: Wired", lambda: None, enabled=False))
+    # Check if Hotspot is active
     elif hotspot_status == "active":
         menu_items.insert(0, item(f"{hotspot_icon} Current Connection: Hotspot", lambda: None, enabled=False))
+    # No connection
     else:
         menu_items.insert(0, item("Current Connection: Not Connected", lambda: None, enabled=False))
 
@@ -301,13 +347,18 @@ def create_menu_items(icon):
 
 # Update the menu with the current status
 def update_menu(icon):
-    icon.menu = create_menu_items(icon)
-    # Not all pystray backends support update_menu; handle gracefully
-    if hasattr(icon, 'update_menu'):
-        try:
+    try:
+        logging.info("Updating menu...")
+        icon.menu = create_menu_items(icon)
+        # Force update on pystray - different methods for different backends
+        if hasattr(icon, 'update_menu'):
             icon.update_menu()
-        except Exception as e:
-            logging.warning(f"update_menu() not supported: {e}")
+            logging.info("Menu updated via update_menu()")
+        else:
+            # For AppIndicator backend, recreating menu is enough
+            logging.info("Menu recreated (update_menu not available)")
+    except Exception as e:
+        logging.error(f"Error updating menu: {e}")
 
 
 # Create the system tray icon and menu
